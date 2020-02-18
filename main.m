@@ -5,17 +5,16 @@ close all;
 data = readtable('abalone.data.csv');
 
 % Rings statistics
-% min value = 1
-% max value = 29
+minRingsVal = 1;
+maxRingsVal = 29;
 
 % Define the two colormaps for ring clusters.
 cmap1 = hot(15);
 cmap2 = winter(15);
 % Combine them into one tall colormap.
 combinedColorMap = [cmap1; cmap2];
-randomRows = randi(size(combinedColorMap, 1), [29, 1]);
+randomRows = randi(size(combinedColorMap, 1), [maxRingsVal, 1]);
 randomColors = combinedColorMap(randomRows, :);
-
 
 % Set table headers
 variable_names = {'Sex', 'Length', 'Diameter', 'Height', 'Whole weight', ...
@@ -55,13 +54,32 @@ hold all;
 
 title(['PV = ', num2str(pv)], 'fontsize', 20);
 
-for ring = 1:29
-    indRing = find(Y == ring);
-    plot(U(indRing, 1), U(indRing, 2), 'ok', 'markersize', 8, ...
-        'markerfacecolor', randomColors(ring, :));
+for ringsNumber = 1:maxRingsVal
+    idx = find(Y == ringsNumber);
+    plot(U(idx, 1), U(idx, 2), 'ok', 'markersize', 8, ...
+        'markerfacecolor', randomColors(ringsNumber, :));
 end
 
-le = legend(string(1:29)');
+le = legend(string(1:maxRingsVal-1)');
+set(le, 'fontsize', 8, 'location', 'best');
+
+grid on;
+
+% 3-dimensional space projection
+pv = sum(dS(1:3))/sum(dS);
+
+fig = figure;
+hold all;
+
+title(['PV = ', num2str(pv)], 'fontsize', 20);
+
+for ringsNumber = 1:maxRingsVal
+    idx = find(Y == ringsNumber);
+    plot3(U(idx, 1), U(idx, 2), U(idx, 3), 'ok', 'markersize', 8, ...
+        'markerfacecolor', randomColors(ringsNumber, :));
+end
+
+le = legend(string(1:maxRingsVal-1)');
 set(le, 'fontsize', 8, 'location', 'best');
 
 grid on;
