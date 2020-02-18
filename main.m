@@ -115,36 +115,19 @@ H = [1 0 0 0 0 0 0;
 
 % Male
 indexes = find(X(:,1) == -1);
-US = U(indexes, [1 2 3]);
-XSO = X(indexes, 2:end);
-[N, n] = size(XSO);
+% US = U(indexes, [1 2 3]);
+male_err = calc_err(X(indexes, 2:end), H, 1000);
+figure;
+hist(male_err);
 
-limiter = floor(N * 0.7);
+% Infant
+indexes = find(X(:,1) == 0);
+inf_err = calc_err(X(indexes, 2:end), H, 1000);
+figure;
+hist(inf_err);
 
-for k = 1:100
-    per = randperm(N);
-    XSO = XSO(per, :);
-    XS = XSO(1:limiter, :);
-    Xe = XSO(1:limiter, :);
-
-    % Mean and Covariance (FIT)
-    xb = mean(XS);
-    B  = cov(XS);
-
-    % Estimation
-    sig = 0.01;
-    eobs = sig * randn(4, 1);
-    y = H*(Xe') + eobs;
-    % Posterior
-    xa = (inv(B) + (1 / sig^2) * H'* H) \ (B \ (xb') + (1 / sig^2) * H' * y);
-    % Covarianza posterior
-    Ca = inv(inv(B) + (1 / sig^2) * H' * H);
-
-    est9 = xa(5:8);
-    %var3 = Ca(3,3);
-    ERR(k) = norm(est9 - Xe(5:8)', 1) / norm(Xe(5:8), 1);
-end
-
-hist(ERR)
-
-
+% Female
+indexes = find(X(:,1) == 1);
+fem_err = calc_err(X(indexes, 2:end), H, 1000);
+figure;
+hist(fem_err);
