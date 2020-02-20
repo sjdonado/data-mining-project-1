@@ -86,20 +86,6 @@ set(le, 'fontsize', 8, 'location', 'best');
 
 grid on;
 
-% Projection by sex variable
-figure;
-hold all;
-C = {'b','r','m'};
-for la = -1:1
-    indexes = find(X(:,1) == la);
-    plot3(U(indexes, 1) , U(indexes, 2), U(indexes, 3), 'ok', ...
-        'markersize', 8, 'markerfacecolor', C{la + 2});
-end
-
-le = legend('M', 'I', 'F');
-set(le, 'fontsize', 8, 'location', 'best');
-grid on;
-
 % Correlation
 C = corr(X);
 
@@ -108,26 +94,63 @@ imagesc(C);
 colorbar;
 
 % Defined H according to the project specifications
-H = [1 0 0 0 0 0 0;
-     0 1 0 0 0 0 0;
-     0 0 1 0 0 0 0;
-     0 0 0 1 0 0 0];
+H = eye(3, 8);
 
-% Male
-indexes = find(X(:,1) == -1);
-% US = U(indexes, [1 2 3]);
-male_err = calc_err(X(indexes, 2:end), H, 1000);
-figure;
-hist(male_err);
+% Calculate model error
+X = [X Y];
+[N, n] = size(X);
+limiter = floor(N * 0.7);
+epochs = 100;
 
-% Infant
-indexes = find(X(:,1) == 0);
-inf_err = calc_err(X(indexes, 2:end), H, 1000);
-figure;
-hist(inf_err);
+for k = 1:epochs
+    % 70-30 random partition
+    per = randperm(N);
+    x_per = X(per, :);
+    x_tra = x_per(1:limiter, :);
+    x_val = x_per(limiter + 1: N, :);
+    
+    % Calculate rings distribution moments by sex custlers
+    for sex_idx = -1:1
+        x_sex = x_tra(x_tra(:, 1) == sex_idx, 2:end);
+        for rings_idx = 1:maxRingsVal
+            x_r = x_sex(x_sex(:, end) == rings_idx, :);
 
-% Female
-indexes = find(X(:,1) == 1);
-fem_err = calc_err(X(indexes, 2:end), H, 1000);
-figure;
-hist(fem_err);
+            if ~isempty(x_r)
+                [length, ~] = size(x_r);
+                if length > 1
+                    mean_r = H * (mean(x_r)');
+                else
+                    mean_r = H * (x_r');
+                end
+                m_rings{rings_idx} = mean_r;
+                c_rings{rings_idx} = H * cov(x_r) * H';
+            end 
+        end
+        s_m{sex_idx + 2} = m_rings;
+        s_c{sex_idx + 2} = c_rings;
+    end
+    
+    % Validation
+    for idx = 1:N - limiter - 1
+        sex_idx = x_val(idx, 1);
+        xg = x_val(idx, 2:end);
+        yg = H * (xg');
+        cg = xg(8);
+        
+        m_rings_g = s_m{sex_idx + 2};
+        c_rings_g = s_c{sex_idx + 2};
+        
+        % Adjust to nearest rings cluster
+        for rings_idx = 1:maxRingsVal
+            xb = m_rings_g{rings_idx}';
+            B = c_rings_g{rings_idx};
+            if ~isempty(xb)
+               p_rings(rings_idx) = mvnpdf(yg, xb', B);
+            end
+        end
+        
+        [~, pos_rings] = max(p_rings);
+        
+        jejeje
+    end
+end
