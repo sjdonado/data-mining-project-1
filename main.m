@@ -142,15 +142,25 @@ for k = 1:epochs
         
         % Adjust to nearest rings cluster
         for rings_idx = 1:maxRingsVal
+        if rings_idx <= size(m_rings_g,2)
             xb = m_rings_g{rings_idx}';
             B = c_rings_g{rings_idx};
-            if ~isempty(xb)
+            [~,p] = chol(B);
+            BisPositive = (p == 0 && rank(B) == size(B,1));
+            if ~isempty(xb) && BisPositive
                p_rings(rings_idx) = mvnpdf(yg, xb', B);
             end
+        end
         end
         
         [~, pos_rings] = max(p_rings);
         
-        jejeje
+        esti_rings(idx) = pos_rings;
+        real_rings(idx) = cg;
     end
+    % Calculate success rate of the iteration
+    A(k) = sum(esti_rings==real_rings)/(N-limiter);
 end
+
+fig = figure;
+hist(A);
