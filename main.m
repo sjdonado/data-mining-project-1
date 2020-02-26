@@ -7,10 +7,15 @@ data = readtable('abalone.data.csv');
 % Dataset given values
 minRingsVal = 1;
 maxRingsVal = 29;
-
-% Set the plot opts
 totalRings = 1:maxRingsVal;
 totalRings(28) = [];
+
+% Get random colors
+combinedColorMap = [hot(15); winter(14)];
+randomRows = randi(size(combinedColorMap, 1), [maxRingsVal, 1]);
+
+% Set the plot opts
+colors = combinedColorMap(randomRows, :);
 labels = string(totalRings)';
 
 % Set table headers
@@ -26,9 +31,9 @@ matrixData = table2array(data(:, 2:9));
 
 % Relabel Sex variable
 parsedSexVar = zeros(4177, 1);
-parsedSexVar(strcmpi(data.Sex, 'M')) = -1;
-parsedSexVar(strcmpi(data.Sex, 'I')) = 0;
-parsedSexVar(strcmpi(data.Sex, 'F')) = 1;
+parsedSexVar(strcmpi(data.Sex, 'M')) = 1 * 10^-1;
+parsedSexVar(strcmpi(data.Sex, 'I')) = 2 * 10^-1;
+parsedSexVar(strcmpi(data.Sex, 'F')) = 3 * 10^-1;
 
 X = [parsedSexVar matrixData];
 
@@ -48,7 +53,8 @@ title(['PV = ', num2str(pv)], 'fontsize', 20);
 
 for ringsIdx = totalRings
     indexes = find(X(:, end) == ringsIdx);
-    plot(U(indexes, 1), U(indexes, 2), '.', 'markersize', 20);
+    plot(U(indexes, 1), U(indexes, 2), 'ok', 'markersize', 8, ...
+        'markerfacecolor', colors(ringsIdx, :));
 end
 
 le = legend(labels);
@@ -64,8 +70,8 @@ title(['PV = ', num2str(pv)], 'fontsize', 20);
 
 for ringsIdx = totalRings
     indexes = find(X(:, end) == ringsIdx);
-    plot3(U(indexes, 1), U(indexes, 2), U(indexes, 3), '.', ...
-        'markersize', 20);
+    plot3(U(indexes, 1), U(indexes, 2), U(indexes, 3), 'ok', ...
+        'markersize', 8, 'markerfacecolor', colors(ringsIdx, :));
 end
 
 le = legend(labels);
@@ -81,12 +87,12 @@ imagesc(C);
 colorbar;
 
 % Defined H according to the project requeriments
-H = eye(4,8);
+H = eye(5, 9);
 
 % Calculate model error
 [N, n] = size(X);
 limiter = floor(N * 0.7);
-epochs = 10;
+epochs = 100;
 
 for k = 1:epochs
     % 70-30 random partition
@@ -94,39 +100,31 @@ for k = 1:epochs
     xPer = X(per, :);
     xTra = xPer(1:limiter, :);
     xVal = xPer(limiter + 1: N, :);
+    [NVal, ~] = size(xVal);
     
-    % Calculate rings distribution moments by sex custlers
-    for sexIdx = -1:1
-        xSex = xTra(xTra(:, 1) == sexIdx, 2:end);
-        for ringsIdx = totalRings
-            xr = xSex(xSex(:, end) == ringsIdx, :);
-            [length, ~] = size(xr);
-            if length > 1
-                meanR = H * (mean(xr)');
-            else
-                meanR = H * (xr');
-            end
-            mRings{ringsIdx} = meanR;
-            cRings{ringsIdx} = H * cov(xr) * H';
+    % Calculate moments by rings number
+    for ringsIdx = totalRings
+        xr = xTra(xTra(:, 9) == ringsIdx, :);
+        [length, ~] = size(xr);
+        if length > 1
+            meanR = H * (mean(xr)');
+        else
+            meanR = H * (xr');
         end
-        meansBySex{sexIdx + 2} = mRings;
-        covariancesBySex{sexIdx + 2} = cRings;
+        mRings{ringsIdx} = meanR;
+        cRings{ringsIdx} = H * cov(xr) * H';
     end
     
     % Validation
-    for idx = 1:N - limiter - 1
-        sexIdx = xVal(idx, 1);
-        xg = xVal(idx, 2:end);
+    for idx = 1:NVal
+        xg = xVal(idx, :);
         yg = H * (xg');
-        cg = xg(8);
-        
-        mRingsG = meansBySex{sexIdx + 2};
-        cRingsG = covariancesBySex{sexIdx + 2};
+        cg = xg(9);
         
         % Adjust to nearest rings cluster
         for ringsIdx = totalRings
-            xb = mRingsG{ringsIdx}';
-            B = cRingsG{ringsIdx};
+            xb = mRings{ringsIdx}';
+            B = cRings{ringsIdx};
             [~, p] = chol(B);
             bisPositive = (p == 0 && rank(B) == size(B, 1));
             if ~isempty(xb) && bisPositive
