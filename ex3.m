@@ -31,9 +31,9 @@ matrixData = table2array(data(:, 2:9));
 
 % Relabel Sex variable
 parsedSexVar = zeros(4177, 1);
-parsedSexVar(strcmpi(data.Sex, 'M')) = 1 * 10^-1;
-parsedSexVar(strcmpi(data.Sex, 'I')) = 2 * 10^-1;
-parsedSexVar(strcmpi(data.Sex, 'F')) = 3 * 10^-1;
+parsedSexVar(strcmpi(data.Sex, 'M')) = -1;
+parsedSexVar(strcmpi(data.Sex, 'I')) = 0;
+parsedSexVar(strcmpi(data.Sex, 'F')) = 1;
 
 X = [parsedSexVar matrixData];
 
@@ -107,14 +107,14 @@ for k = 1:epochs
         xr = xTra(xTra(:, 9) == ringsIdx, :);
         [length, ~] = size(xr);
         if length > 1
-            meanR = H * (mean(xr)');
+            mRings{ringsIdx} = H * (mean(xr)');
+            cRings{ringsIdx} = H * cov(xr) * H';
         else
-            meanR = H * (xr');
+            mRings{ringsIdx} = [];
+            cRings{ringsIdx} = [];
         end
-        mRings{ringsIdx} = meanR;
-        cRings{ringsIdx} = H * cov(xr) * H';
     end
-    
+
     % Validation
     for idx = 1:NVal
         xg = xVal(idx, :);
