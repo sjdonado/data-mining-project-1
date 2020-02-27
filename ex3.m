@@ -39,9 +39,6 @@ X = [parsedSexVar matrixData];
 
 % Singular values descomposition
 [U, S, V] = svd(X);
-
-PHI = V/S;
-PHI3 = PHI(:, 1:3); %To project onto three dimensions
 dS = diag(S);
 
 % 2-dimensional space projection
@@ -111,8 +108,6 @@ for k = 1:epochs
             cRings{ringsIdx} = H * cov(xr) * H';
         else
             rMRings{ringsIdx} = [];
-            mRings{ringsIdx} = [];
-            cRings{ringsIdx} = [];
         end
     end
     
@@ -120,21 +115,12 @@ for k = 1:epochs
     for ringsIdx = totalRings
         if ringsIdx > 1 && ringsIdx + 1 <= maxRingsVal
             xr = xTra(xTra(:, 9) == ringsIdx, :);
-
-            bIdx = ringsIdx - 1;
-            aIdx = ringsIdx + 1;
-            if ringsIdx + 1 == 28
-                aIdx = 29;
-            end
-            if ringsIdx - 1 == 28
-                bIdx = 27;
-            end
             
-            xb = mRings{ringsIdx};
-            B = cRings{ringsIdx};
-            entry = isempty(B) || isempty(xb) || size(xb, 1) == 1;
+            rMR = rMRings{ringsIdx};
+            entry = isempty(rMR);
             
             if ~entry
+                B = cRings{ringsIdx};
                 [~, p] = chol(B);
                 bisPositive = (p == 0 && rank(B) == size(B, 1));
                 entry = ~bisPositive;
@@ -142,18 +128,35 @@ for k = 1:epochs
             
             if entry
                 nxr = [];
+                rMRings{ringsIdx} = [];
+                
+                bIdx = ringsIdx - 1;
+                aIdx = ringsIdx + 1;
+                if ringsIdx + 1 == 28
+                    aIdx = 29;
+                end
+                if ringsIdx - 1 == 28
+                    bIdx = 27;
+                end
+                
                 if ~isempty(rMRings{bIdx})
                     nxr = [rMRings{bIdx}; xr];
                 end
                 if ~isempty(rMRings{aIdx})
                     nxr = [nxr; rMRings{aIdx}];
                 end
-                
+
                 [length, ~] = size(nxr);
                 if length > 1
-                    rMRings{ringsIdx} = mean(nxr);
-                    mRings{ringsIdx} = H * (rMRings{ringsIdx}');
-                    cRings{ringsIdx} = H * cov(nxr) * H';
+                    B = H * cov(nxr) * H';
+                    [~, p] = chol(B);
+                    bisPositive = (p == 0 && rank(B) == size(B, 1));
+                    if bisPositive
+                        mnxr = mean(nxr);
+                        rMRings{ringsIdx} = mnxr;
+                        mRings{ringsIdx} = H * (mnxr');
+                        cRings{ringsIdx} = B;
+                    end                 
                 end
             end
         end
@@ -166,14 +169,10 @@ for k = 1:epochs
         cg = xg(9);
         % Calculate nearest rings cluster
         for ringsIdx = totalRings
-            xb = mRings{ringsIdx}';
-            B = cRings{ringsIdx};
-            if ~isempty(xb) && ~isempty(B)
-                [~, p] = chol(B);
-                bisPositive = (p == 0 && rank(B) == size(B, 1));
-                if bisPositive
-                    pRings(ringsIdx) = mvnpdf(yg, xb', B);
-                end
+            if ~isempty(rMRings{ringsIdx})
+                xb = mRings{ringsIdx}';
+                B = cRings{ringsIdx};
+                pRings(ringsIdx) = mvnpdf(yg, xb', B);
             end
         end
         
