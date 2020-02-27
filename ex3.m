@@ -79,9 +79,8 @@ set(le, 'fontsize', 8, 'location', 'best');
 
 grid on;
 
-% Correlation
+% Print correlation
 C = corr(X);
-
 figure;
 imagesc(C);
 colorbar;
@@ -89,56 +88,102 @@ colorbar;
 % Defined H according to the project requeriments
 H = eye(5, 9);
 
-% Calculate model error
 [N, n] = size(X);
-limiter = floor(N * 0.7);
+NTra = floor(N * 0.7);
 epochs = 100;
 
+% Training
 for k = 1:epochs
     % 70-30 random partition
     per = randperm(N);
     xPer = X(per, :);
-    xTra = xPer(1:limiter, :);
-    xVal = xPer(limiter + 1: N, :);
+    xTra = xPer(1:NTra, :);
+    xVal = xPer(NTra + 1:end, :);
     [NVal, ~] = size(xVal);
     
-    % Calculate moments by rings number
+    % Calculate rings moments
     for ringsIdx = totalRings
         xr = xTra(xTra(:, 9) == ringsIdx, :);
         [length, ~] = size(xr);
         if length > 1
-            mRings{ringsIdx} = H * (mean(xr)');
+            rMRings{ringsIdx} = mean(xr);
+            mRings{ringsIdx} = H * (rMRings{ringsIdx}');
             cRings{ringsIdx} = H * cov(xr) * H';
         else
+            rMRings{ringsIdx} = [];
             mRings{ringsIdx} = [];
             cRings{ringsIdx} = [];
         end
     end
+    
+    % Fix mean and cov values of xr with size 1
+    for ringsIdx = totalRings
+        if ringsIdx > 1 && ringsIdx + 1 <= maxRingsVal
+            xr = xTra(xTra(:, 9) == ringsIdx, :);
 
-    % Validation
+            bIdx = ringsIdx - 1;
+            aIdx = ringsIdx + 1;
+            if ringsIdx + 1 == 28
+                aIdx = 29;
+            end
+            if ringsIdx - 1 == 28
+                bIdx = 27;
+            end
+            
+            xb = mRings{ringsIdx};
+            B = cRings{ringsIdx};
+            entry = isempty(B) || isempty(xb) || size(xb, 1) == 1;
+            
+            if ~entry
+                [~, p] = chol(B);
+                bisPositive = (p == 0 && rank(B) == size(B, 1));
+                entry = ~bisPositive;
+            end
+            
+            if entry
+                nxr = [];
+                if ~isempty(rMRings{bIdx})
+                    nxr = [rMRings{bIdx}; xr];
+                end
+                if ~isempty(rMRings{aIdx})
+                    nxr = [nxr; rMRings{aIdx}];
+                end
+                
+                [length, ~] = size(nxr);
+                if length > 1
+                    rMRings{ringsIdx} = mean(nxr);
+                    mRings{ringsIdx} = H * (rMRings{ringsIdx}');
+                    cRings{ringsIdx} = H * cov(nxr) * H';
+                end
+            end
+        end
+    end
+
+    % Cross validation
     for idx = 1:NVal
         xg = xVal(idx, :);
         yg = H * (xg');
         cg = xg(9);
-        
-        % Adjust to nearest rings cluster
+        % Calculate nearest rings cluster
         for ringsIdx = totalRings
             xb = mRings{ringsIdx}';
             B = cRings{ringsIdx};
-            [~, p] = chol(B);
-            bisPositive = (p == 0 && rank(B) == size(B, 1));
-            if ~isempty(xb) && bisPositive
-               pRings(ringsIdx) = mvnpdf(yg, xb', B);
+            if ~isempty(xb) && ~isempty(B)
+                [~, p] = chol(B);
+                bisPositive = (p == 0 && rank(B) == size(B, 1));
+                if bisPositive
+                    pRings(ringsIdx) = mvnpdf(yg, xb', B);
+                end
             end
         end
         
         [~, posRings] = max(pRings);
-
         estiRings(idx) = posRings;
         realRings(idx) = cg;
     end
+
     % Calculate success rate of the iteration
-    A(k) = sum(estiRings == realRings) / (N - limiter)
+    A(k) = sum(estiRings == realRings) / NVal
 end
 
 fig = figure;
