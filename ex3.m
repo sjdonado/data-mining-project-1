@@ -82,26 +82,26 @@ figure;
 imagesc(C);
 colorbar;
 
-% Group rings clusters at least in pairs
-% ringsIdx = maxRingsVal;
-% while ringsIdx > 1
-%     xrIdxs = X(:, 9) == ringsIdx;
-%     xr = X(xrIdxs, :);
-%     if size(xr, 1) == 1
-%         if ringsIdx - 1 == 28
-%             ringsIdx = ringsIdx - 1;
-%         end
-%         prevXrIdx = X(:, 9) == ringsIdx - 1;
-%         prevXr = X(prevXrIdx, :);
-%         X(xrIdxs | prevXrIdx, 9) = ceil((xr(1, 9) + prevXr(1, 9)) / 2);
-%         ringsIdx = ringsIdx - 1;
-%     end
-%     ringsIdx = ringsIdx - 1;
-% end
-% 
-% totalRings = unique(X(:, 9),'rows')';
-% minRingsVal = min(totalRings);
-% maxRingsVal = min(totalRings);
+% Grouping one row clusters in pairs
+ringsIdx = maxRingsVal;
+while ringsIdx > 1
+    xrIdxs = X(:, 9) == ringsIdx;
+    xr = X(xrIdxs, :);
+    if size(xr, 1) == 1
+        if ringsIdx - 1 == 28
+            ringsIdx = ringsIdx - 1;
+        end
+        prevXrIdx = X(:, 9) == ringsIdx - 1;
+        prevXr = X(prevXrIdx, :);
+        X(xrIdxs | prevXrIdx, 9) = ceil((xr(1, 9) + prevXr(1, 9)) / 2);
+        ringsIdx = ringsIdx - 1;
+    end
+    ringsIdx = ringsIdx - 1;
+end
+
+totalRings = unique(X(:, 9),'rows')';
+minRingsVal = min(totalRings);
+maxRingsVal = min(totalRings);
 
 % Defined H according to the project requeriments
 H = eye(5, 9);
@@ -122,22 +122,26 @@ for k = 1:epochs
     % Calculate rings moments
     for ringsIdx = totalRings
         xr = xTra(xTra(:, 9) == ringsIdx, :);
-        [length, ~] = size(xr);
+        length = size(xr, 1);
         if length > 1
-            rMRings{ringsIdx} = mean(xr);
-            mRings{ringsIdx} = H * (rMRings{ringsIdx}');
+            lastRings{ringsIdx} = xr(end-1:end, :);
+            mRings{ringsIdx} = H * (mean(xr)');
             cRings{ringsIdx} = H * cov(xr) * H';
         else
-            rMRings{ringsIdx} = [];
+            if length == 1
+                lastRings{ringsIdx} = xr;
+                cRings{ringsIdx} = [];
+            else
+                lastRings{ringsIdx} = [];
+            end
         end
     end
     
-    % Fix non positive definite cov values
+    % Fix moments calculations adding to the cluster the nearest neighborhoods 
     for ringsIdx = totalRings
         xr = xTra(xTra(:, 9) == ringsIdx, :);
-
-        rMR = rMRings{ringsIdx};
-        entry = isempty(rMR);
+     
+        entry = isempty(lastRings{ringsIdx}) || isempty(cRings{ringsIdx});
 
         if ~entry
             B = cRings{ringsIdx};
@@ -148,32 +152,35 @@ for k = 1:epochs
 
         if entry
             nxr = [];
-            rMRings{ringsIdx} = [];
-
-            pIdx = ringsIdx - 1;
-            aIdx = ringsIdx + 1;
-
-            if pIdx >= minRingsVal && ~isempty(rMRings{pIdx})
-                nxr = rMRings{pIdx};
-            end
+            lastRings{ringsIdx} = [];
             
-            nxr = [nxr; xr];
- 
-            if aIdx <= maxRingsVal && ~isempty(rMRings{aIdx})
-                nxr = [nxr; rMRings{aIdx}];
-            end
+            if length > 0
+                pIdx = ringsIdx - 1;
+                aIdx = ringsIdx + 1;
+                pRings = [];
+                aRings = [];
 
-            [length, ~] = size(nxr);
-            if length > 1
-                B = H * cov(nxr) * H';
-                [~, p] = chol(B);
-                bisPositive = (p == 0 && rank(B) == size(B, 1));
-                if bisPositive
-                    mnxr = mean(nxr);
-                    rMRings{ringsIdx} = mnxr;
-                    mRings{ringsIdx} = H * (mnxr');
-                    cRings{ringsIdx} = B;
-                end                 
+                if pIdx >= minRingsVal
+                    pRings = lastRings{pIdx};
+                end
+                
+                if aIdx <= maxRingsVal
+                    aRings = lastRings{aIdx};
+                end
+                
+                nxr = [pRings; xr; aRings];
+                
+                length = size(nxr, 1);
+                if length > 1
+                    B = H * cov(nxr) * H';
+                    [~, p] = chol(B);
+                    bisPositive = (p == 0 && rank(B) == size(B, 1));
+                    if bisPositive
+                        lastRings{ringsIdx} = nxr(end-1:end, :);
+                        mRings{ringsIdx} = H * (mean(nxr)');
+                        cRings{ringsIdx} = B;
+                    end
+                end
             end
         end
     end
@@ -185,7 +192,7 @@ for k = 1:epochs
         cg = xg(9);
         % Calculate nearest rings cluster
         for ringsIdx = totalRings
-            if ~isempty(rMRings{ringsIdx})
+            if ~isempty(lastRings{ringsIdx})
                 xb = mRings{ringsIdx}';
                 B = cRings{ringsIdx};
                 pRings(ringsIdx) = mvnpdf(yg, xb', B);
@@ -198,8 +205,8 @@ for k = 1:epochs
     end
 
     % Calculate success rate of the iteration
-    A(k) = sum(estiRings == realRings) / NVal;
+    A(k) = sum(estiRings == realRings) / NVal
 end
 
-fig = figure;
+figure;
 hist(A);
