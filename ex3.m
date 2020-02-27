@@ -82,6 +82,27 @@ figure;
 imagesc(C);
 colorbar;
 
+% Group rings clusters at least in pairs
+% ringsIdx = maxRingsVal;
+% while ringsIdx > 1
+%     xrIdxs = X(:, 9) == ringsIdx;
+%     xr = X(xrIdxs, :);
+%     if size(xr, 1) == 1
+%         if ringsIdx - 1 == 28
+%             ringsIdx = ringsIdx - 1;
+%         end
+%         prevXrIdx = X(:, 9) == ringsIdx - 1;
+%         prevXr = X(prevXrIdx, :);
+%         X(xrIdxs | prevXrIdx, 9) = ceil((xr(1, 9) + prevXr(1, 9)) / 2);
+%         ringsIdx = ringsIdx - 1;
+%     end
+%     ringsIdx = ringsIdx - 1;
+% end
+% 
+% totalRings = unique(X(:, 9),'rows')';
+% minRingsVal = min(totalRings);
+% maxRingsVal = min(totalRings);
+
 % Defined H according to the project requeriments
 H = eye(5, 9);
 
@@ -111,53 +132,48 @@ for k = 1:epochs
         end
     end
     
-    % Fix mean and cov values of xr with size 1
+    % Fix non positive definite cov values
     for ringsIdx = totalRings
-        if ringsIdx > 1 && ringsIdx + 1 <= maxRingsVal
-            xr = xTra(xTra(:, 9) == ringsIdx, :);
-            
-            rMR = rMRings{ringsIdx};
-            entry = isempty(rMR);
-            
-            if ~entry
-                B = cRings{ringsIdx};
-                [~, p] = chol(B);
-                bisPositive = (p == 0 && rank(B) == size(B, 1));
-                entry = ~bisPositive;
+        xr = xTra(xTra(:, 9) == ringsIdx, :);
+
+        rMR = rMRings{ringsIdx};
+        entry = isempty(rMR);
+
+        if ~entry
+            B = cRings{ringsIdx};
+            [~, p] = chol(B);
+            bisPositive = (p == 0 && rank(B) == size(B, 1));
+            entry = ~bisPositive;
+        end
+
+        if entry
+            nxr = [];
+            rMRings{ringsIdx} = [];
+
+            pIdx = ringsIdx - 1;
+            aIdx = ringsIdx + 1;
+
+            if pIdx >= minRingsVal && ~isempty(rMRings{pIdx})
+                nxr = rMRings{pIdx};
             end
             
-            if entry
-                nxr = [];
-                rMRings{ringsIdx} = [];
-                
-                bIdx = ringsIdx - 1;
-                aIdx = ringsIdx + 1;
-                if ringsIdx + 1 == 28
-                    aIdx = 29;
-                end
-                if ringsIdx - 1 == 28
-                    bIdx = 27;
-                end
-                
-                if ~isempty(rMRings{bIdx})
-                    nxr = [rMRings{bIdx}; xr];
-                end
-                if ~isempty(rMRings{aIdx})
-                    nxr = [nxr; rMRings{aIdx}];
-                end
+            nxr = [nxr; xr];
+ 
+            if aIdx <= maxRingsVal && ~isempty(rMRings{aIdx})
+                nxr = [nxr; rMRings{aIdx}];
+            end
 
-                [length, ~] = size(nxr);
-                if length > 1
-                    B = H * cov(nxr) * H';
-                    [~, p] = chol(B);
-                    bisPositive = (p == 0 && rank(B) == size(B, 1));
-                    if bisPositive
-                        mnxr = mean(nxr);
-                        rMRings{ringsIdx} = mnxr;
-                        mRings{ringsIdx} = H * (mnxr');
-                        cRings{ringsIdx} = B;
-                    end                 
-                end
+            [length, ~] = size(nxr);
+            if length > 1
+                B = H * cov(nxr) * H';
+                [~, p] = chol(B);
+                bisPositive = (p == 0 && rank(B) == size(B, 1));
+                if bisPositive
+                    mnxr = mean(nxr);
+                    rMRings{ringsIdx} = mnxr;
+                    mRings{ringsIdx} = H * (mnxr');
+                    cRings{ringsIdx} = B;
+                end                 
             end
         end
     end
@@ -182,7 +198,7 @@ for k = 1:epochs
     end
 
     % Calculate success rate of the iteration
-    A(k) = sum(estiRings == realRings) / NVal
+    A(k) = sum(estiRings == realRings) / NVal;
 end
 
 fig = figure;
