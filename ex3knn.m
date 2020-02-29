@@ -32,6 +32,9 @@ X = [parsedSexVar matrixData];
 % Defined H according to the project requeriments
 H = eye(5, 9);
 
+% H including Rings, for estimation
+Hest = [H; zeros(1,8), 1];
+
 [N, n] = size(X);
 
 % Find random abalone to plot
@@ -67,11 +70,39 @@ for i = 1:5
     % Find neighborhood and estimate rings
     neighIdx = knnsearch(Xh, xrh, 'K', k(i));
     Xneigh = Xr(neighIdx,:);
-    xrEsti = mode(Xneigh);
 
-    estiRings = xrEsti(9);
-    realRings = xr(9);
-    success(i) = estiRings == realRings;
+    % Find parameters for estimation
+    C = Hest*cov(Xneigh)*Hest';
+    xm = mean(Xneigh)*Hest';
+
+    % Ignore variables where variance is zero
+    nonZeroVariance = diag(C) ~= 0;
+    C = C(nonZeroVariance,nonZeroVariance);
+    [~, p] = chol(C);
+    CisPositive = (p == 0 && rank(C) == size(C, 1));
+    if nonZeroVariance(end) && CisPositive
+        xm = xm(nonZeroVariance);
+        xrEst = xrh(nonZeroVariance(1:end-1));
+
+        % Estimate rings
+        totalRings = unique(Xneigh(:, end),'rows')';
+        for ringsIdx = totalRings
+            y = [xrEst, ringsIdx];
+            probRings(ringsIdx) = mvnpdf(y, xm, C);
+        end
+        [~,estiRings] = max(probRings);
+    else
+        % If rings covariance is zero
+        estiRings = round(xm(end));
+    end
+
+    % Estimate using mode
+    xrMod = mode(Xneigh);
+    modeRings = xrMod(end);
+
+    realRings = xr(end); % Actual
+    successRandNormal(i) = estiRings == realRings;
+    successRandMode(i) = modeRings == realRings;
 
     plotIdx = setdiff(neighIdx, plotIdx);
     plot3(Ur(plotIdx, 1), Ur(plotIdx, 2), Ur(plotIdx, 3), 'ow', ...
@@ -103,18 +134,47 @@ for k = [10 50 100 500 1000]
 
         values = knnsearch(Xtra_atr', Xval_atr', 'K', k);
         for idx = 1:NVal
-            est(idx) = mode(values(idx, :)');
+            Xneigh = xTra(values(idx,:),:);
+
+            C = Hest*cov(Xneigh)*Hest';
+            xm = mean(Xneigh)*Hest';
+
+            nonZeroVariance = diag(C) ~= 0;
+            C = C(nonZeroVariance,nonZeroVariance);
+            [~, p] = chol(C);
+            CisPositive = (p == 0 && rank(C) == size(C, 1));
+            if nonZeroVariance(end) && CisPositive
+                xm = xm(nonZeroVariance);
+                Xval_est = Xval_atr(nonZeroVariance(1:end-1),idx)';
+
+                probRings = zeros(1, maxRingsVal);
+                totalRings = unique(Xneigh(:, end),'rows')';
+                for ringsIdx = totalRings
+                    y = [Xval_est, ringsIdx];
+                    probRings(ringsIdx) = mvnpdf(y, xm, C);
+                end
+                [~,rings] = max(probRings);
+                xEst(idx) = rings;
+            else
+                xEst(idx) = round(xm(end));
+            end
+
+            xMod(idx,:) = mode(Xneigh);
         end
 
-        cat_est = xTra(est, 9); % Estimated
-        cat_real = xVal(:, 9); % Actual
+        estiRings = xEst';        % Estimated by normal distribution
+        modeRings = xMod(:, end); % Estimated by mode
+        realRings = xVal(:, end); % Actual
 
-        A(it) = sum(cat_est == cat_real) / NVal; 
+        successMode(it) = sum(modeRings == realRings) / NVal;
+        successNormal(it) = sum(estiRings == realRings) / NVal;
     end
     
     figure;
     hold all;
     title(['KNN - K = ', num2str(k)], 'fontsize', 20); 
-    hist(A);
+    histogram(successNormal,15);
+    histogram(successMode,15);
+    legend('Success rate of Bayesian inference', 'Success rate of mode');
 end
 
