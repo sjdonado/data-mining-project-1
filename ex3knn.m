@@ -33,6 +33,57 @@ X = [parsedSexVar matrixData];
 H = eye(5, 9);
 
 [N, n] = size(X);
+
+% Find random abalone to plot
+xrIdx = randi(N);
+xr = X(xrIdx, :);
+Xr = X(1:end ~= xrIdx,:);
+
+xrh = xr*H';
+Xh = Xr*H';
+
+% 3-dimensions projection
+[U, S, V] = svd(X,0);
+U = U(:,1:3);
+dS = diag(S);
+pv = sum(dS(1:3))/sum(dS);
+
+% Plot xr and its neighbors
+figure;
+hold all;
+title(['KNN - PV = ', num2str(pv)]);
+colors = spring(5);
+
+ur = U(xrIdx,:);
+Ur = U(1:end ~= xrIdx,:);
+plot3(ur(1), ur(2), ur(3), 'ob', ...
+    'markersize', 12, 'markerfacecolor', 'b');
+
+% Defined k values for KNN search
+k = [10 50 100 500 1000];
+
+plotIdx = [];
+for i = 1:5
+    % Find neighborhood and estimate rings
+    neighIdx = knnsearch(Xh, xrh, 'K', k(i));
+    Xneigh = Xr(neighIdx,:);
+    xrEsti = mode(Xneigh);
+
+    estiRings = xrEsti(9);
+    realRings = xr(9);
+    success(i) = estiRings == realRings;
+
+    plotIdx = setdiff(neighIdx, plotIdx);
+    plot3(Ur(plotIdx, 1), Ur(plotIdx, 2), Ur(plotIdx, 3), 'ow', ...
+        'markersize', 6, 'markerfacecolor', colors(i,:));
+end
+
+plot3(U(:, 1), U(:, 2), U(:, 3), 'ok', ...
+    'markersize', 2, 'markerfacecolor', 'k');
+legend(['Random abalone', string(k), 'All']');
+grid on;
+
+% Cross validation
 NTra = floor(N * 0.7);
 epochs = 100;
 

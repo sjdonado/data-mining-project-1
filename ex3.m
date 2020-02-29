@@ -205,7 +205,7 @@ for k = 1:epochs
     end
 
     % Calculate success rate of the iteration
-    A(k) = sum(estiRings == realRings) / NVal
+    A(k) = sum(estiRings == realRings) / NVal;
 end
 
 figure;
