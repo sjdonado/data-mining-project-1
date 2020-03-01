@@ -8,7 +8,6 @@ data = readtable('abalone.data.csv');
 minRingsVal = 1;
 maxRingsVal = 29;
 totalRings = 1:maxRingsVal;
-totalRings(28) = [];
 
 % Get random colors
 combinedColorMap = [hot(15); winter(14)];
@@ -16,7 +15,9 @@ randomRows = randi(size(combinedColorMap, 1), [maxRingsVal, 1]);
 
 % Set the plot opts
 colors = combinedColorMap(randomRows, :);
-labels = string(totalRings)';
+labels = totalRings;
+labels(28) = [];
+labels = string(labels)';
 
 % Set table headers
 variableNames = {'Sex', 'Length', 'Diameter', 'Height', 'Whole weight', ...
@@ -87,7 +88,7 @@ ringsIdx = maxRingsVal;
 while ringsIdx > 1
     xrIdxs = X(:, 9) == ringsIdx;
     xr = X(xrIdxs, :);
-    if size(xr, 1) == 1
+    if size(xr, 1) < 3
         if ringsIdx - 1 == 28
             ringsIdx = ringsIdx - 1;
         end
@@ -98,13 +99,16 @@ while ringsIdx > 1
     end
     ringsIdx = ringsIdx - 1;
 end
-
 totalRings = unique(X(:, 9),'rows')';
 minRingsVal = min(totalRings);
-maxRingsVal = min(totalRings);
+maxRingsVal = max(totalRings);
 
 % Defined H according to the project requeriments
-H = eye(5, 9);
+H = eye(8, 9);
+Hcv = eye(5, 9);
+Hpa = eye(5, 8);
+meml = cell(1, maxRingsVal);
+sig = 0.01;
 
 [N, n] = size(X);
 NTra = floor(N * 0.7);
@@ -121,86 +125,97 @@ for k = 1:epochs
     
     % Calculate rings moments
     for ringsIdx = totalRings
+%         limits{ringsIdx} = [];
+        mRings{ringsIdx} = [];
+        cRings{ringsIdx} = [];
         xr = xTra(xTra(:, 9) == ringsIdx, :);
         length = size(xr, 1);
         if length > 1
-            lastRings{ringsIdx} = xr(end-1:end, :);
-            mRings{ringsIdx} = H * (mean(xr)');
-            cRings{ringsIdx} = H * cov(xr) * H';
-        else
-            if length == 1
-                lastRings{ringsIdx} = xr;
-                cRings{ringsIdx} = [];
-            else
-                lastRings{ringsIdx} = [];
+%             limits{ringsIdx} = [min(xr); max(xr)];
+            xb = H * (mean(xr)');
+            B = H * cov(xr) * H';
+            [~, p] = chol(B);
+            bisPositive = (p == 0 && rank(B) == size(B, 1));
+            if bisPositive
+                mRings{ringsIdx} = xb;
+                cRings{ringsIdx} = B;
             end
+%         else
+%             if length == 1
+%                 limits{ringsIdx} = xr;
+%             end
         end
     end
     
     % Fix moments calculations adding to the cluster the nearest neighborhoods 
-    for ringsIdx = totalRings
-        xr = xTra(xTra(:, 9) == ringsIdx, :);
-     
-        entry = isempty(lastRings{ringsIdx}) || isempty(cRings{ringsIdx});
-
-        if ~entry
-            B = cRings{ringsIdx};
-            [~, p] = chol(B);
-            bisPositive = (p == 0 && rank(B) == size(B, 1));
-            entry = ~bisPositive;
-        end
-
-        if entry
-            nxr = [];
-            lastRings{ringsIdx} = [];
-            
-            if length > 0
-                pIdx = ringsIdx - 1;
-                aIdx = ringsIdx + 1;
-                pRings = [];
-                aRings = [];
-
-                if pIdx >= minRingsVal
-                    pRings = lastRings{pIdx};
-                end
-                
-                if aIdx <= maxRingsVal
-                    aRings = lastRings{aIdx};
-                end
-                
-                nxr = [pRings; xr; aRings];
-                
-                length = size(nxr, 1);
-                if length > 1
-                    B = H * cov(nxr) * H';
-                    [~, p] = chol(B);
-                    bisPositive = (p == 0 && rank(B) == size(B, 1));
-                    if bisPositive
-                        lastRings{ringsIdx} = nxr(end-1:end, :);
-                        mRings{ringsIdx} = H * (mean(nxr)');
-                        cRings{ringsIdx} = B;
-                    end
-                end
-            end
-        end
-    end
+%     for ringsIdx = totalRings
+%         xr = xTra(xTra(:, 9) == ringsIdx, :);
+%         xr_length = size(xr, 1);
+%         entry = isempty(mRings{ringsIdx}) && xr_length > 0;
+%         if ~entry && ~isempty(cRings)
+%             B = cRings{ringsIdx};
+%             [~, p] = chol(B);
+%             bisPositive = (p == 0 && rank(B) == size(B, 1));
+%             entry = ~bisPositive;
+%         end
+%         if entry
+%             mRings{ringsIdx} = [];
+%             pRings = [];
+%             aRings = [];
+%             
+%             pIdx = ringsIdx - 1;
+%             aIdx = ringsIdx + 1;
+% 
+%             if pIdx >= minRingsVal && ~isempty(limits{pIdx})
+%                 pRings = limits{pIdx}(end, :);
+%             end
+% 
+%             if aIdx <= maxRingsVal && ~isempty(limits{aIdx})
+%                 aRings = limits{aIdx}(1, :);
+%             end
+%             
+%             nxr = [pRings; xr; aRings];
+%             
+%             length = size(nxr, 1);
+%             if length >= 2
+%                 if xr_length < 2
+%                     limits{ringsIdx} = [nxr(1, :); nxr(end, :)];
+%                 end
+%                 if length > 2
+%                     B = H * cov(nxr) * H';
+%                     [~, p] = chol(B);
+%                     bisPositive = (p == 0 && rank(B) == size(B, 1));
+% 
+%                     if bisPositive
+%                         limits{ringsIdx} = [min(nxr); max(nxr)];
+%                         mRings{ringsIdx} = H * (mean(nxr)');
+%                         cRings{ringsIdx} = B;
+%                     end
+%                 end
+%             end
+%         end
+%     end
 
     % Cross validation
     for idx = 1:NVal
         xg = xVal(idx, :);
-        yg = H * (xg');
+        yg = Hcv * (xg');
         cg = xg(9);
         % Calculate nearest rings cluster
         for ringsIdx = totalRings
-            if ~isempty(lastRings{ringsIdx})
+            if ~isempty(mRings{ringsIdx})
                 xb = mRings{ringsIdx}';
                 B = cRings{ringsIdx};
-                pRings(ringsIdx) = mvnpdf(yg, xb', B);
+                if isempty(meml{ringsIdx})
+                    meml{ringsIdx} = (inv(B) + (1 / sig^2) * Hpa' * Hpa);
+                    memr{ringsIdx} = B \ (xb');
+                end
+                xa = meml{ringsIdx} \ (memr{ringsIdx} + (1 / sig^2) * Hpa' * yg);
+                pRings(ringsIdx) = mvnpdf(xa, xb', B);
             end
         end
-        
         [~, posRings] = max(pRings);
-        estiRings(idx) = posRings;
+        estiRings(idx) = totalRings(posRings);
         realRings(idx) = cg;
     end
 
@@ -209,4 +224,4 @@ for k = 1:epochs
 end
 
 figure;
-hist(A);
+histogram(A);
