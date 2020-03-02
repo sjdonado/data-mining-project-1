@@ -64,8 +64,8 @@ plot3(ur(1), ur(2), ur(3), 'ob', ...
 
 % Defined k values for KNN search
 k = [10 50 100 500 1000];
-
 plotIdx = [];
+
 for i = 1:5
     % Find neighborhood and estimate rings
     neighIdx = knnsearch(Xh, xrh, 'K', k(i));
@@ -119,6 +119,7 @@ NTra = floor(N * 0.7);
 epochs = 100;
 
 for k = [10 50 100 500 1000]
+    sig = 10^(-1 * randi(3));
     % Training
     for it = 1:epochs
         % 70-30 random partition
@@ -130,7 +131,7 @@ for k = [10 50 100 500 1000]
 
         % Calculate nearest rings cluster by KNN search
         Xtra_atr = H * (xTra');
-        Xval_atr = H * (xVal');
+        Xval_atr = H * (xVal') * (1 / sig^2);
 
         values = knnsearch(Xtra_atr', Xval_atr', 'K', k);
         for idx = 1:NVal
@@ -169,12 +170,14 @@ for k = [10 50 100 500 1000]
         successMode(it) = sum(modeRings == realRings) / NVal;
         successNormal(it) = sum(estiRings == realRings) / NVal;
     end
-    
+
     figure;
     hold all;
-    title(['KNN - K = ', num2str(k)], 'fontsize', 20); 
+    title(['KNN - K = ', num2str(k), ' sigma = ', num2str(sig)], 'fontsize', 20); 
     histogram(successNormal,15);
     histogram(successMode,15);
     legend('Success rate of Bayesian inference', 'Success rate of mode');
 end
+
+
 

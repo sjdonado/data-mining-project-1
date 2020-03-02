@@ -83,7 +83,7 @@ figure;
 imagesc(C);
 colorbar;
 
-% Grouping one row clusters in pairs
+% Grouping rings clusters with less than 3 rows
 ringsIdx = maxRingsVal;
 while ringsIdx > 1
     xrIdxs = X(:, 9) == ringsIdx;
@@ -125,13 +125,11 @@ for k = 1:epochs
     
     % Calculate rings moments
     for ringsIdx = totalRings
-%         limits{ringsIdx} = [];
         mRings{ringsIdx} = [];
         cRings{ringsIdx} = [];
         xr = xTra(xTra(:, 9) == ringsIdx, :);
         length = size(xr, 1);
         if length > 1
-%             limits{ringsIdx} = [min(xr); max(xr)];
             xb = H * (mean(xr)');
             B = H * cov(xr) * H';
             [~, p] = chol(B);
@@ -140,61 +138,8 @@ for k = 1:epochs
                 mRings{ringsIdx} = xb;
                 cRings{ringsIdx} = B;
             end
-%         else
-%             if length == 1
-%                 limits{ringsIdx} = xr;
-%             end
         end
     end
-    
-    % Fix moments calculations adding to the cluster the nearest neighborhoods 
-%     for ringsIdx = totalRings
-%         xr = xTra(xTra(:, 9) == ringsIdx, :);
-%         xr_length = size(xr, 1);
-%         entry = isempty(mRings{ringsIdx}) && xr_length > 0;
-%         if ~entry && ~isempty(cRings)
-%             B = cRings{ringsIdx};
-%             [~, p] = chol(B);
-%             bisPositive = (p == 0 && rank(B) == size(B, 1));
-%             entry = ~bisPositive;
-%         end
-%         if entry
-%             mRings{ringsIdx} = [];
-%             pRings = [];
-%             aRings = [];
-%             
-%             pIdx = ringsIdx - 1;
-%             aIdx = ringsIdx + 1;
-% 
-%             if pIdx >= minRingsVal && ~isempty(limits{pIdx})
-%                 pRings = limits{pIdx}(end, :);
-%             end
-% 
-%             if aIdx <= maxRingsVal && ~isempty(limits{aIdx})
-%                 aRings = limits{aIdx}(1, :);
-%             end
-%             
-%             nxr = [pRings; xr; aRings];
-%             
-%             length = size(nxr, 1);
-%             if length >= 2
-%                 if xr_length < 2
-%                     limits{ringsIdx} = [nxr(1, :); nxr(end, :)];
-%                 end
-%                 if length > 2
-%                     B = H * cov(nxr) * H';
-%                     [~, p] = chol(B);
-%                     bisPositive = (p == 0 && rank(B) == size(B, 1));
-% 
-%                     if bisPositive
-%                         limits{ringsIdx} = [min(nxr); max(nxr)];
-%                         mRings{ringsIdx} = H * (mean(nxr)');
-%                         cRings{ringsIdx} = B;
-%                     end
-%                 end
-%             end
-%         end
-%     end
 
     % Cross validation
     for idx = 1:NVal
@@ -218,7 +163,7 @@ for k = 1:epochs
         estiRings(idx) = totalRings(posRings);
         realRings(idx) = cg;
     end
-
+    
     % Calculate success rate of the iteration
     A(k) = sum(estiRings == realRings) / NVal;
 end
